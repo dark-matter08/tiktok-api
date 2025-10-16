@@ -1,0 +1,41 @@
+services:
+  tiktok-api:
+    image: ${DOCKER_USERNAME}/tiktok-api:latest
+    container_name: tiktok-api-backend
+    restart: unless-stopped
+    ports:
+      - "9010:8000"
+    environment:
+      - API_KEYS=${API_KEYS}
+      - MS_TOKENS=${MS_TOKENS}
+      - ENVIRONMENT=production
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - tiktok-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: tiktok-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - tiktok-network
+
+volumes:
+  redis_data:
+
+networks:
+  tiktok-network:
+    driver: bridge
