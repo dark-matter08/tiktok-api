@@ -17,6 +17,7 @@ services:
       - TIKTOK_BROWSER=webkit
       - TIKTOK_SLEEP_AFTER=3
       - TIKTOK_NUM_SESSIONS=1
+      - TIKTOK_HEADLESS=true
       # Webshare Proxy Configuration (Optional)
       - ENABLE_PROXY=true
       - WEBSHARE_API_KEY=yzpbrvnnmiaqi56zhiyfph75pqggp5m5x3ckrrdqy

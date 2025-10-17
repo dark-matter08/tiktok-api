@@ -65,6 +65,10 @@ class Settings(BaseSettings):
         default=1,
         description="Number of TikTok sessions to create"
     )
+    tiktok_headless: bool = Field(
+        default=True,
+        description="Run TikTok browser in headless mode"
+    )
 
     # Webshare Proxy Configuration
     webshare_api_key: Optional[str] = Field(

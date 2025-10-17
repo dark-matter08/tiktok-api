@@ -98,7 +98,6 @@ jobs:
             export DOCKER_USERNAME="${{ secrets.DOCKER_USERNAME }}"
             export API_KEYS="${{ secrets.API_KEYS }}"
             export MS_TOKENS="${{ secrets.MS_TOKENS }}"
-            export REDIS_URL="${{ secrets.REDIS_URL }}"
             export LOG_LEVEL="INFO"
 
             # Pull latest image

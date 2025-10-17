@@ -80,6 +80,8 @@ WORKDIR /app
 # Copy virtual environment from builder stage
 COPY --from=builder /app/.venv /app/.venv
 
+# Install Playwright browsers and system dependencies as root
+RUN /app/.venv/bin/python -m playwright install --with-deps
 
 # Copy application code
 COPY app/ ./app/
@@ -87,11 +89,13 @@ COPY app/ ./app/
 # Change ownership to appuser
 RUN chown -R appuser:appuser /app
 
+# Copy Playwright browsers from root to appuser
+RUN mkdir -p /home/appuser/.cache/ms-playwright && \
+    cp -r /root/.cache/ms-playwright/* /home/appuser/.cache/ms-playwright/ && \
+    chown -R appuser:appuser /home/appuser/.cache
+
 # Switch to non-root user
 USER appuser
-
-# Install Playwright browsers as appuser (install all browsers for flexibility)
-RUN /app/.venv/bin/python -m playwright install
 
 # Expose port
 EXPOSE 8000

@@ -102,6 +102,7 @@ The API automatically resolves shortened URLs to extract the video ID.
 | `TIKTOK_BROWSER` | Browser for TikTok API (chromium/firefox/webkit) | `chromium` |
 | `TIKTOK_SLEEP_AFTER` | Sleep time after creating sessions | `3` |
 | `TIKTOK_NUM_SESSIONS` | Number of TikTok sessions | `1` |
+| `TIKTOK_HEADLESS` | Run TikTok browser in headless mode | `true` |
 | `ENABLE_PROXY` | Enable proxy rotation via Webshare | `false` |
 | `WEBSHARE_API_KEY` | Webshare API key for proxy service | None |
 | `PROXY_ALGORITHM` | Proxy rotation algorithm (round-robin/random/first) | `round-robin` |

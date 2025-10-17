@@ -100,14 +100,23 @@ class TikTokService:
                     logger.info(
                         f"Using {len(self.proxy_provider.list_proxies())} proxies")
 
-            # Create sessions with proxy provider
+            # Create sessions with proxy provider (only if proxies are available)
+            proxy_provider = None
+            if self.proxy_provider and self.proxy_provider.list_proxies():
+                proxy_provider = self.proxy_provider
+                logger.info(
+                    f"Using proxy provider with {len(self.proxy_provider.list_proxies())} proxies")
+            else:
+                logger.info(
+                    "No proxy provider or no proxies available, running without proxy")
+
             await api.create_sessions(
                 ms_tokens=[token],
                 num_sessions=self.settings.tiktok_num_sessions,
                 sleep_after=self.settings.tiktok_sleep_after,
                 browser=self.settings.tiktok_browser,
-                proxy_provider=self.proxy_provider if self.proxy_provider else None,
-                headless=True
+                proxy_provider=proxy_provider,
+                headless=self.settings.tiktok_headless
             )
 
             yield api
