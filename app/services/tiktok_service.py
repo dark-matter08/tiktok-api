@@ -13,6 +13,8 @@ import httpx
 from TikTokApi import TikTokApi
 from TikTokApi.exceptions import EmptyResponseException, TikTokException as TikTokApiException
 
+TikTokApi(logging_level=logging.INFO)
+
 # Custom proxy providers imports
 try:
     from app.services.proxy import Webshare, RoundRobin, Random, First
@@ -80,15 +82,21 @@ class TikTokService:
         return algorithm_map.get(self.settings.proxy_algorithm, RoundRobin())
 
     @asynccontextmanager
-    async def get_api_instance(self):
+    async def get_api_instance(self, custom_ms_token: Optional[str] = None):
         """Get TikTok API instance with token rotation."""
         token = None
         api = None
         try:
-            # Get a healthy token
-            token = await self.token_manager.get_token()
-            if not token:
-                raise TikTokException("No healthy MS tokens available")
+            # Use custom token if provided, otherwise get a healthy token from manager
+            logger.info(
+                f"==================> Getting API instance with custom MS token: {custom_ms_token}")
+            if custom_ms_token:
+                token = custom_ms_token
+                logger.debug(f"Using custom MS token: {token[:10]}...")
+            else:
+                token = await self.token_manager.get_token()
+                if not token:
+                    raise TikTokException("No healthy MS tokens available")
 
             # Create API instance
             api = TikTokApi()
@@ -110,23 +118,43 @@ class TikTokService:
                 logger.info(
                     "No proxy provider or no proxies available, running without proxy")
 
+            context_options = {
+                'viewport': {'width': 1280, 'height': 1024},
+                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.150 Safari/537.36'
+            }
+
+            proxies = await proxy_provider.fetch_proxies()
+            structured_proxies = []
+            for proxy in proxies:
+                proxy_object = {
+                    "server": f"http://{proxy.host}:{proxy.port}",
+                    "username": proxy.username,
+                    "password": proxy.password,
+                }
+                structured_proxies.append(proxy_object)
+
+            logger.debug(
+                f"==================> Structured proxies: {structured_proxies}")
             await api.create_sessions(
                 ms_tokens=[token],
                 num_sessions=self.settings.tiktok_num_sessions,
                 sleep_after=self.settings.tiktok_sleep_after,
                 browser=self.settings.tiktok_browser,
-                proxy_provider=proxy_provider,
-                headless=self.settings.tiktok_headless
+                # proxy_provider=proxy_provider,
+                proxies=structured_proxies,
+                context_options=context_options,
+                headless=True
             )
 
             yield api
 
-            # Mark token as successful
-            await self.token_manager.mark_token_success(token)
+            # Mark token as successful (only for managed tokens, not custom ones)
+            if not custom_ms_token:
+                await self.token_manager.mark_token_success(token)
 
         except Exception as e:
-            # Mark token as failed
-            if token:
+            # Mark token as failed (only for managed tokens, not custom ones)
+            if token and not custom_ms_token:
                 await self.token_manager.mark_token_failure(token, str(e))
             logger.error(f"Error in API instance: {e}")
             raise
@@ -138,10 +166,10 @@ class TikTokService:
                 except Exception as e:
                     logger.warning(f"Error closing TikTok API instance: {e}")
 
-    async def get_trending_videos(self, count: int = 30) -> List[Dict[str, Any]]:
+    async def get_trending_videos(self, count: int = 30, custom_ms_token: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get trending videos from TikTok."""
         try:
-            async with self.get_api_instance() as api:
+            async with self.get_api_instance(custom_ms_token=custom_ms_token) as api:
                 videos = []
                 async for video in api.trending.videos(count=count):
                     videos.append(video.as_dict)
@@ -150,10 +178,10 @@ class TikTokService:
             logger.error(f"Error fetching trending videos: {e}")
             raise TikTokException(f"Failed to fetch trending videos: {e}")
 
-    async def get_user_info(self, username: str) -> Dict[str, Any]:
+    async def get_user_info(self, username: str, custom_ms_token: Optional[str] = None) -> Dict[str, Any]:
         """Get user information by username."""
         try:
-            async with self.get_api_instance() as api:
+            async with self.get_api_instance(custom_ms_token=custom_ms_token) as api:
                 user = api.user(username)
                 user_info = await user.info()
                 return user_info.as_dict
@@ -162,10 +190,10 @@ class TikTokService:
             raise TikTokException(
                 f"Failed to fetch user info for {username}: {e}")
 
-    async def get_user_videos(self, username: str, count: int = 30) -> List[Dict[str, Any]]:
+    async def get_user_videos(self, username: str, count: int = 30, custom_ms_token: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get user's videos by username."""
         try:
-            async with self.get_api_instance() as api:
+            async with self.get_api_instance(custom_ms_token=custom_ms_token) as api:
                 videos: List[Dict[str, Any]] = []
                 async for video in api.user(username).videos(count=count):
                     if isinstance(video, dict):
@@ -181,10 +209,10 @@ class TikTokService:
             raise TikTokException(
                 f"Failed to fetch user videos for {username}: {e}")
 
-    async def get_video_info(self, video_id: str, video_url: str = None) -> Dict[str, Any]:
+    async def get_video_info(self, video_id: str, video_url: str = None, custom_ms_token: Optional[str] = None) -> Dict[str, Any]:
         """Get video information by video ID."""
         try:
-            async with self.get_api_instance() as api:
+            async with self.get_api_instance(custom_ms_token=custom_ms_token) as api:
                 # Create video object with ID
                 video = api.video(id=video_id)
 
@@ -222,10 +250,10 @@ class TikTokService:
             raise TikTokException(
                 f"Failed to fetch video info for {video_id}: {e}")
 
-    async def get_hashtag_videos(self, hashtag: str, count: int = 30) -> List[Dict[str, Any]]:
+    async def get_hashtag_videos(self, hashtag: str, count: int = 30, custom_ms_token: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get videos for a specific hashtag."""
         try:
-            async with self.get_api_instance() as api:
+            async with self.get_api_instance(custom_ms_token=custom_ms_token) as api:
                 videos = []
                 async for video in api.hashtag(name=hashtag).videos(count=count):
                     videos.append(video.as_dict)
@@ -235,10 +263,10 @@ class TikTokService:
             raise TikTokException(
                 f"Failed to fetch hashtag videos for #{hashtag}: {e}")
 
-    async def search_users(self, query: str, count: int = 30) -> List[Dict[str, Any]]:
+    async def search_users(self, query: str, count: int = 30, custom_ms_token: Optional[str] = None) -> List[Dict[str, Any]]:
         """Search for users by query."""
         try:
-            async with self.get_api_instance() as api:
+            async with self.get_api_instance(custom_ms_token=custom_ms_token) as api:
                 users = []
                 async for user in api.search.users(query, count=count):
                     users.append(user.as_dict)
@@ -248,10 +276,10 @@ class TikTokService:
             raise TikTokException(
                 f"Failed to search users for query '{query}': {e}")
 
-    async def search_videos(self, query: str, count: int = 30) -> List[Dict[str, Any]]:
+    async def search_videos(self, query: str, count: int = 30, custom_ms_token: Optional[str] = None) -> List[Dict[str, Any]]:
         """Search for videos by query."""
         try:
-            async with self.get_api_instance() as api:
+            async with self.get_api_instance(custom_ms_token=custom_ms_token) as api:
                 videos = []
                 async for video in api.search.videos(query, count=count):
                     videos.append(video.as_dict)
@@ -261,10 +289,10 @@ class TikTokService:
             raise TikTokException(
                 f"Failed to search videos for query '{query}': {e}")
 
-    async def get_sound_videos(self, sound_id: str, count: int = 30) -> List[Dict[str, Any]]:
+    async def get_sound_videos(self, sound_id: str, count: int = 30, custom_ms_token: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get videos using a specific sound."""
         try:
-            async with self.get_api_instance() as api:
+            async with self.get_api_instance(custom_ms_token=custom_ms_token) as api:
                 videos = []
                 async for video in api.sound(id=sound_id).videos(count=count):
                     videos.append(video.as_dict)
@@ -275,10 +303,10 @@ class TikTokService:
             raise TikTokException(
                 f"Failed to fetch sound videos for sound {sound_id}: {e}")
 
-    async def get_sound_info(self, sound_id: str) -> Dict[str, Any]:
+    async def get_sound_info(self, sound_id: str, custom_ms_token: Optional[str] = None) -> Dict[str, Any]:
         """Get sound information by sound ID."""
         try:
-            async with self.get_api_instance() as api:
+            async with self.get_api_instance(custom_ms_token=custom_ms_token) as api:
                 sound = api.sound(id=sound_id)
                 sound_info = await sound.info()
                 return sound_info.as_dict
@@ -287,10 +315,10 @@ class TikTokService:
             raise TikTokException(
                 f"Failed to fetch sound info for {sound_id}: {e}")
 
-    async def get_hashtag_info(self, hashtag: str) -> Dict[str, Any]:
+    async def get_hashtag_info(self, hashtag: str, custom_ms_token: Optional[str] = None) -> Dict[str, Any]:
         """Get hashtag information by hashtag name."""
         try:
-            async with self.get_api_instance() as api:
+            async with self.get_api_instance(custom_ms_token=custom_ms_token) as api:
                 hashtag_obj = api.hashtag(name=hashtag)
                 hashtag_info = await hashtag_obj.info()
                 return hashtag_info.as_dict
@@ -299,10 +327,10 @@ class TikTokService:
             raise TikTokException(
                 f"Failed to fetch hashtag info for #{hashtag}: {e}")
 
-    async def get_user_followers(self, username: str, count: int = 30) -> List[Dict[str, Any]]:
+    async def get_user_followers(self, username: str, count: int = 30, custom_ms_token: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get user's followers."""
         try:
-            async with self.get_api_instance() as api:
+            async with self.get_api_instance(custom_ms_token=custom_ms_token) as api:
                 followers = []
                 async for follower in api.user(username).followers(count=count):
                     followers.append(follower.as_dict)
@@ -312,10 +340,10 @@ class TikTokService:
             raise TikTokException(
                 f"Failed to fetch followers for {username}: {e}")
 
-    async def get_user_following(self, username: str, count: int = 30) -> List[Dict[str, Any]]:
+    async def get_user_following(self, username: str, count: int = 30, custom_ms_token: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get users that the user is following."""
         try:
-            async with self.get_api_instance() as api:
+            async with self.get_api_instance(custom_ms_token=custom_ms_token) as api:
                 following = []
                 async for user in api.user(username).following(count=count):
                     following.append(user.as_dict)
@@ -325,12 +353,13 @@ class TikTokService:
             raise TikTokException(
                 f"Failed to fetch following for {username}: {e}")
 
-    async def get_video_comments(self, video_id: str, count: int = 30) -> List[Dict[str, Any]]:
+    async def get_video_comments(self, video_id: str, count: int = 30, custom_ms_token: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get comments for a video."""
         try:
-            async with self.get_api_instance() as api:
+            async with self.get_api_instance(custom_ms_token=custom_ms_token) as api:
                 comments = []
-                async for comment in api.video(id=video_id).comments(count=count):
+                video = api.video(id=video_id)
+                async for comment in video.comments(count=count):
                     comments.append(comment.as_dict)
                 return comments
         except Exception as e:
@@ -338,7 +367,7 @@ class TikTokService:
             raise TikTokException(
                 f"Failed to fetch comments for video {video_id}: {e}")
 
-    async def get_video_download_info(self, video_id: str, video_url: str = None, watermark: bool = False, quality: str = "auto") -> Dict[str, Any]:
+    async def get_video_download_info(self, video_id: str, video_url: str = None, watermark: bool = False, quality: str = "auto", custom_ms_token: Optional[str] = None) -> Dict[str, Any]:
         """Get video download information including URLs for different qualities and watermark options."""
         start_time = time.time()
         logger.info(
@@ -347,7 +376,7 @@ class TikTokService:
         try:
             # Reuse the existing get_video_info method to avoid duplicating logic
             logger.debug(f"Fetching video info for {video_id}")
-            video_data = await self.get_video_info(video_id, video_url=video_url)
+            video_data = await self.get_video_info(video_id, video_url=video_url, custom_ms_token=custom_ms_token)
             logger.info(f"Successfully retrieved video data for {video_id}")
 
             # Extract download URLs from video data
@@ -387,7 +416,7 @@ class TikTokService:
             raise TikTokException(
                 f"Failed to fetch video download info for {video_id}: {e}")
 
-    async def get_video_bytes(self, video_id: str, video_url: str = None, watermark: bool = False, quality: str = "auto") -> bytes:
+    async def get_video_bytes(self, video_id: str, video_url: str = None, watermark: bool = False, quality: str = "auto", custom_ms_token: Optional[str] = None) -> bytes:
         """Get video bytes for streaming download."""
         start_time = time.time()
         logger.info(
@@ -396,7 +425,7 @@ class TikTokService:
         try:
             # First get the download info to get the appropriate URL
             logger.debug(f"Getting download info for {video_id}")
-            download_info = await self.get_video_download_info(video_id, video_url, watermark, quality)
+            download_info = await self.get_video_download_info(video_id, video_url, watermark, quality, custom_ms_token)
             logger.info(f"Retrieved download info for {video_id}")
 
             # Select the appropriate download URL based on preferences
@@ -549,11 +578,11 @@ class TikTokService:
 
         return None
 
-    async def health_check(self) -> Dict[str, Any]:
+    async def health_check(self, custom_ms_token: Optional[str] = None) -> Dict[str, Any]:
         """Perform a health check on the TikTok service."""
         try:
             # Try to get a small number of trending videos as a health check
-            videos = await self.get_trending_videos(count=1)
+            videos = await self.get_trending_videos(count=1, custom_ms_token=custom_ms_token)
             return {
                 "status": "healthy",
                 "message": "TikTok service is operational",

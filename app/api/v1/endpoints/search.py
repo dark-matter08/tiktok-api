@@ -1,12 +1,13 @@
 """Search-related endpoints."""
 
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from app.dependencies import get_authenticated_user, rate_limit_search
+from app.dependencies import get_authenticated_user, rate_limit_search, get_ms_token
 from app.models.schemas import (
     ErrorResponse,
     SearchUsersResponse,
@@ -28,7 +29,7 @@ limiter = Limiter(key_func=get_remote_address)
     "/users",
     response_model=SearchUsersResponse,
     summary="Search Users",
-    description="Search for TikTok users by query",
+    description="Search for TikTok users by query. Optionally provide X-MS-Token header to use a custom MS token instead of environment-configured tokens.",
     responses={
         200: {"description": "Successfully retrieved user search results"},
         400: {"description": "Bad request", "model": ErrorResponse},
@@ -51,6 +52,7 @@ async def search_users(
         description="Number of users to retrieve (1-100)"
     ),
     api_key: str = Depends(get_authenticated_user),
+    ms_token: Optional[str] = Depends(get_ms_token),
     tiktok_service: TikTokService = Depends(get_tiktok_service)
 ) -> SearchUsersResponse:
     """
@@ -73,7 +75,7 @@ async def search_users(
             f"Searching users with query '{q}' (count: {count}) with API key: {api_key[:10]}...")
 
         # Search users from TikTok service
-        users_data = await tiktok_service.search_users(q, count=count)
+        users_data = await tiktok_service.search_users(q, count=count, custom_ms_token=ms_token)
 
         # Convert to Pydantic models
         users = [create_tiktok_user(user_data) for user_data in users_data]
@@ -98,7 +100,7 @@ async def search_users(
     "/videos",
     response_model=SearchVideosResponse,
     summary="Search Videos",
-    description="Search for TikTok videos by query",
+    description="Search for TikTok videos by query. Optionally provide X-MS-Token header to use a custom MS token instead of environment-configured tokens.",
     responses={
         200: {"description": "Successfully retrieved video search results"},
         400: {"description": "Bad request", "model": ErrorResponse},
@@ -121,6 +123,7 @@ async def search_videos(
         description="Number of videos to retrieve (1-100)"
     ),
     api_key: str = Depends(get_authenticated_user),
+    ms_token: Optional[str] = Depends(get_ms_token),
     tiktok_service: TikTokService = Depends(get_tiktok_service)
 ) -> SearchVideosResponse:
     """
@@ -143,7 +146,7 @@ async def search_videos(
             f"Searching videos with query '{q}' (count: {count}) with API key: {api_key[:10]}...")
 
         # Search videos from TikTok service
-        videos_data = await tiktok_service.search_videos(q, count=count)
+        videos_data = await tiktok_service.search_videos(q, count=count, custom_ms_token=ms_token)
 
         # Convert to Pydantic models
         videos = [create_tiktok_video(video_data)

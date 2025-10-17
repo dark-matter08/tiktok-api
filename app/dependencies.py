@@ -1,7 +1,7 @@
 """Authentication and rate limiting dependencies."""
 
 import logging
-from typing import List
+from typing import List, Optional
 
 from fastapi import Depends, HTTPException, Security, status
 from fastapi.security.api_key import APIKeyHeader
@@ -20,6 +20,10 @@ limiter = Limiter(key_func=get_remote_address)
 # API Key configuration
 API_KEY_NAME = "X-API-Key"
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
+
+# MS Token configuration
+MS_TOKEN_NAME = "X-MS-Token"
+ms_token_header = APIKeyHeader(name=MS_TOKEN_NAME, auto_error=False)
 
 
 async def get_api_key(api_key: str = Security(api_key_header)) -> str:
@@ -41,6 +45,22 @@ async def get_api_key(api_key: str = Security(api_key_header)) -> str:
 
     logger.debug(f"Valid API key used: {api_key[:10]}...")
     return api_key
+
+
+async def get_ms_token(ms_token: str = Security(ms_token_header)) -> Optional[str]:
+    """
+    Extract MS token from request headers (optional).
+
+    This dependency extracts the X-MS-Token header value if provided.
+    The header is optional and allows users to override environment-configured
+    MS tokens with their own custom tokens for individual requests.
+    """
+    logger.debug(f"Checking custom token: {ms_token}")
+    if not ms_token:
+        return None
+
+    logger.debug(f"Custom MS token provided: {ms_token[:10]}...")
+    return ms_token
 
 
 def get_rate_limiter() -> Limiter:

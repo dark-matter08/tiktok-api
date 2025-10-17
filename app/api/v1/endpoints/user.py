@@ -1,13 +1,13 @@
 """User-related endpoints."""
 
 import logging
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from app.dependencies import get_authenticated_user, rate_limit_user
+from app.dependencies import get_authenticated_user, rate_limit_user, get_ms_token
 from app.models.schemas import (
     ErrorResponse,
     UserInfoResponse,
@@ -31,7 +31,7 @@ limiter = Limiter(key_func=get_remote_address)
     "/{username}/info",
     response_model=UserInfoResponse,
     summary="Get User Information",
-    description="Retrieve detailed information about a TikTok user",
+    description="Retrieve detailed information about a TikTok user. Optionally provide X-MS-Token header to use a custom MS token instead of environment-configured tokens.",
     responses={
         200: {"description": "Successfully retrieved user information"},
         400: {"description": "Bad request", "model": ErrorResponse},
@@ -48,6 +48,7 @@ async def get_user_info(
     request: Request,
     username: str = Path(..., description="TikTok username"),
     api_key: str = Depends(get_authenticated_user),
+    ms_token: Optional[str] = Depends(get_ms_token),
     tiktok_service: TikTokService = Depends(get_tiktok_service)
 ) -> UserInfoResponse:
     """
@@ -69,7 +70,7 @@ async def get_user_info(
             f"Fetching user info for {username} with API key: {api_key[:10]}...")
 
         # Get user info from TikTok service
-        user_data = await tiktok_service.get_user_info(username)
+        user_data = await tiktok_service.get_user_info(username, custom_ms_token=ms_token)
 
         # Convert to Pydantic model
         user = create_tiktok_user(user_data)
@@ -95,7 +96,7 @@ async def get_user_info(
     "/{username}/videos",
     response_model=UserVideosResponse,
     summary="Get User Videos",
-    description="Retrieve videos posted by a specific TikTok user",
+    description="Retrieve videos posted by a specific TikTok user. Optionally provide X-MS-Token header to use a custom MS token instead of environment-configured tokens.",
     responses={
         200: {"description": "Successfully retrieved user videos"},
         400: {"description": "Bad request", "model": ErrorResponse},
@@ -118,6 +119,7 @@ async def get_user_videos(
         description="Number of videos to retrieve (1-100)"
     ),
     api_key: str = Depends(get_authenticated_user),
+    ms_token: Optional[str] = Depends(get_ms_token),
     tiktok_service: TikTokService = Depends(get_tiktok_service)
 ) -> UserVideosResponse:
     """
@@ -140,7 +142,7 @@ async def get_user_videos(
             f"Fetching {count} videos for user {username} with API key: {api_key[:10]}...")
 
         # Get user videos from TikTok service
-        videos_data = await tiktok_service.get_user_videos(username, count=count)
+        videos_data = await tiktok_service.get_user_videos(username, count=count, custom_ms_token=ms_token)
 
         # Convert to Pydantic models
         videos = [create_tiktok_video(video_data)
@@ -172,7 +174,7 @@ async def get_user_videos(
     "/{username}/followers",
     response_model=UserFollowersResponse,
     summary="Get User Followers",
-    description="Retrieve followers of a specific TikTok user",
+    description="Retrieve followers of a specific TikTok user. Optionally provide X-MS-Token header to use a custom MS token instead of environment-configured tokens.",
     responses={
         200: {"description": "Successfully retrieved user followers"},
         400: {"description": "Bad request", "model": ErrorResponse},
@@ -195,6 +197,7 @@ async def get_user_followers(
         description="Number of followers to retrieve (1-100)"
     ),
     api_key: str = Depends(get_authenticated_user),
+    ms_token: Optional[str] = Depends(get_ms_token),
     tiktok_service: TikTokService = Depends(get_tiktok_service)
 ) -> UserFollowersResponse:
     """
@@ -217,7 +220,7 @@ async def get_user_followers(
             f"Fetching {count} followers for user {username} with API key: {api_key[:10]}...")
 
         # Get user followers from TikTok service
-        followers_data = await tiktok_service.get_user_followers(username, count=count)
+        followers_data = await tiktok_service.get_user_followers(username, count=count, custom_ms_token=ms_token)
 
         # Convert to Pydantic models
         followers = [create_tiktok_user(follower_data)
@@ -249,7 +252,7 @@ async def get_user_followers(
     "/{username}/following",
     response_model=UserFollowingResponse,
     summary="Get User Following",
-    description="Retrieve users that a specific TikTok user is following",
+    description="Retrieve users that a specific TikTok user is following. Optionally provide X-MS-Token header to use a custom MS token instead of environment-configured tokens.",
     responses={
         200: {"description": "Successfully retrieved user following"},
         400: {"description": "Bad request", "model": ErrorResponse},
@@ -272,6 +275,7 @@ async def get_user_following(
         description="Number of users to retrieve (1-100)"
     ),
     api_key: str = Depends(get_authenticated_user),
+    ms_token: Optional[str] = Depends(get_ms_token),
     tiktok_service: TikTokService = Depends(get_tiktok_service)
 ) -> UserFollowingResponse:
     """
@@ -294,7 +298,7 @@ async def get_user_following(
             f"Fetching {count} following for user {username} with API key: {api_key[:10]}...")
 
         # Get user following from TikTok service
-        following_data = await tiktok_service.get_user_following(username, count=count)
+        following_data = await tiktok_service.get_user_following(username, count=count, custom_ms_token=ms_token)
 
         # Convert to Pydantic models
         following = [create_tiktok_user(user_data)

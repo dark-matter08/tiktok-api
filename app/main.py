@@ -4,6 +4,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
+from fastapi.openapi.utils import get_openapi
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -65,6 +66,39 @@ app = FastAPI(
     redoc_url="/redoc" if settings.environment == "development" else None,
     openapi_url="/openapi.json" if settings.environment == "development" else None,
 )
+
+
+def custom_openapi():
+    """Custom OpenAPI schema with X-MS-Token header documentation."""
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+
+    # Add X-MS-Token header to global security schemes
+    if "components" not in openapi_schema:
+        openapi_schema["components"] = {}
+    if "securitySchemes" not in openapi_schema["components"]:
+        openapi_schema["components"]["securitySchemes"] = {}
+
+    # Add X-MS-Token header scheme
+    openapi_schema["components"]["securitySchemes"]["MS-Token"] = {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-MS-Token",
+        "description": "Optional custom MS token to override environment-configured tokens for individual requests"
+    }
+
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
 
 # Add CORS middleware for development
 if settings.environment == "development":

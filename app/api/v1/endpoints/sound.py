@@ -1,12 +1,13 @@
 """Sound-related endpoints."""
 
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from app.dependencies import get_authenticated_user, rate_limit_sound
+from app.dependencies import get_authenticated_user, rate_limit_sound, get_ms_token
 from app.models.schemas import (
     ErrorResponse,
     SoundVideosResponse,
@@ -28,7 +29,7 @@ limiter = Limiter(key_func=get_remote_address)
     "/{sound_id}/videos",
     response_model=SoundVideosResponse,
     summary="Get Sound Videos",
-    description="Retrieve videos using a specific sound",
+    description="Retrieve videos using a specific sound. Optionally provide X-MS-Token header to use a custom MS token instead of environment-configured tokens.",
     responses={
         200: {"description": "Successfully retrieved sound videos"},
         400: {"description": "Bad request", "model": ErrorResponse},
@@ -51,6 +52,7 @@ async def get_sound_videos(
         description="Number of videos to retrieve (1-100)"
     ),
     api_key: str = Depends(get_authenticated_user),
+    ms_token: Optional[str] = Depends(get_ms_token),
     tiktok_service: TikTokService = Depends(get_tiktok_service)
 ) -> SoundVideosResponse:
     """
@@ -73,7 +75,7 @@ async def get_sound_videos(
             f"Fetching {count} videos for sound {sound_id} with API key: {api_key[:10]}...")
 
         # Get sound videos from TikTok service
-        videos_data = await tiktok_service.get_sound_videos(sound_id, count=count)
+        videos_data = await tiktok_service.get_sound_videos(sound_id, count=count, custom_ms_token=ms_token)
 
         # Convert to Pydantic models
         videos = [create_tiktok_video(video_data)
@@ -105,7 +107,7 @@ async def get_sound_videos(
     "/{sound_id}/info",
     response_model=SoundInfoResponse,
     summary="Get Sound Information",
-    description="Retrieve detailed information about a specific sound",
+    description="Retrieve detailed information about a specific sound. Optionally provide X-MS-Token header to use a custom MS token instead of environment-configured tokens.",
     responses={
         200: {"description": "Successfully retrieved sound information"},
         400: {"description": "Bad request", "model": ErrorResponse},
@@ -122,6 +124,7 @@ async def get_sound_info(
     request: Request,
     sound_id: str = Path(..., description="TikTok sound ID"),
     api_key: str = Depends(get_authenticated_user),
+    ms_token: Optional[str] = Depends(get_ms_token),
     tiktok_service: TikTokService = Depends(get_tiktok_service)
 ) -> SoundInfoResponse:
     """
@@ -143,7 +146,7 @@ async def get_sound_info(
             f"Fetching sound info for {sound_id} with API key: {api_key[:10]}...")
 
         # Get sound info from TikTok service
-        sound_data = await tiktok_service.get_sound_info(sound_id)
+        sound_data = await tiktok_service.get_sound_info(sound_id, custom_ms_token=ms_token)
 
         # Convert to Pydantic model
         sound = create_tiktok_sound(sound_data)

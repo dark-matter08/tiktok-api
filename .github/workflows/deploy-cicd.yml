@@ -103,18 +103,18 @@ jobs:
             sleep 15
 
             # Check if containers are running
-            if docker ps | grep -q tik-tok-api-backend; then
+            if docker ps | grep -q tiktok-api-backend; then
               echo "✅ Deployment successful!"
               echo "Running containers:"
               docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
               echo "API container logs:"
-              docker logs --tail 20 tik-tok-api-backend
+              docker logs --tail 20 tiktok-api-backend
             else
               echo "❌ Deployment failed!"
               echo "Container status:"
-              docker ps -a | grep tik-tok
+              docker ps -a | grep tiktok-api-backend
               echo "API container logs:"
-              docker logs tik-tok-api-backend
+              docker logs tiktok-api-backend
               exit 1
             fi
 

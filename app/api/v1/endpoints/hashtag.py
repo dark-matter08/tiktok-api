@@ -1,12 +1,13 @@
 """Hashtag-related endpoints."""
 
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from app.dependencies import get_authenticated_user, rate_limit_hashtag
+from app.dependencies import get_authenticated_user, rate_limit_hashtag, get_ms_token
 from app.models.schemas import (
     ErrorResponse,
     HashtagVideosResponse,
@@ -28,7 +29,7 @@ limiter = Limiter(key_func=get_remote_address)
     "/{hashtag}/videos",
     response_model=HashtagVideosResponse,
     summary="Get Hashtag Videos",
-    description="Retrieve videos associated with a specific hashtag",
+    description="Retrieve videos associated with a specific hashtag. Optionally provide X-MS-Token header to use a custom MS token instead of environment-configured tokens.",
     responses={
         200: {"description": "Successfully retrieved hashtag videos"},
         400: {"description": "Bad request", "model": ErrorResponse},
@@ -51,6 +52,7 @@ async def get_hashtag_videos(
         description="Number of videos to retrieve (1-100)"
     ),
     api_key: str = Depends(get_authenticated_user),
+    ms_token: Optional[str] = Depends(get_ms_token),
     tiktok_service: TikTokService = Depends(get_tiktok_service)
 ) -> HashtagVideosResponse:
     """
@@ -76,7 +78,7 @@ async def get_hashtag_videos(
             f"Fetching {count} videos for hashtag #{clean_hashtag} with API key: {api_key[:10]}...")
 
         # Get hashtag videos from TikTok service
-        videos_data = await tiktok_service.get_hashtag_videos(clean_hashtag, count=count)
+        videos_data = await tiktok_service.get_hashtag_videos(clean_hashtag, count=count, custom_ms_token=ms_token)
 
         # Convert to Pydantic models
         videos = [create_tiktok_video(video_data)
@@ -108,7 +110,7 @@ async def get_hashtag_videos(
     "/{hashtag}/info",
     response_model=HashtagInfoResponse,
     summary="Get Hashtag Information",
-    description="Retrieve detailed information about a specific hashtag",
+    description="Retrieve detailed information about a specific hashtag. Optionally provide X-MS-Token header to use a custom MS token instead of environment-configured tokens.",
     responses={
         200: {"description": "Successfully retrieved hashtag information"},
         400: {"description": "Bad request", "model": ErrorResponse},
@@ -125,6 +127,7 @@ async def get_hashtag_info(
     request: Request,
     hashtag: str = Path(..., description="Hashtag name (without #)"),
     api_key: str = Depends(get_authenticated_user),
+    ms_token: Optional[str] = Depends(get_ms_token),
     tiktok_service: TikTokService = Depends(get_tiktok_service)
 ) -> HashtagInfoResponse:
     """
@@ -149,7 +152,7 @@ async def get_hashtag_info(
             f"Fetching hashtag info for #{clean_hashtag} with API key: {api_key[:10]}...")
 
         # Get hashtag info from TikTok service
-        hashtag_data = await tiktok_service.get_hashtag_info(clean_hashtag)
+        hashtag_data = await tiktok_service.get_hashtag_info(clean_hashtag, custom_ms_token=ms_token)
 
         # Convert to Pydantic model
         hashtag_info = create_tiktok_hashtag(hashtag_data)

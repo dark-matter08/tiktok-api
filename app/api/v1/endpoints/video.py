@@ -1,6 +1,7 @@
 """Video-related endpoints."""
 
 import logging
+from typing import Optional
 from urllib.parse import unquote
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Request, status
@@ -8,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from app.dependencies import get_authenticated_user, rate_limit_video
+from app.dependencies import get_authenticated_user, rate_limit_video, get_ms_token
 from app.models.schemas import (
     ErrorResponse,
     VideoInfoResponse,
@@ -52,7 +53,8 @@ limiter = Limiter(key_func=get_remote_address)
 async def parse_video_url(
     request: Request,
     url_request: VideoUrlRequest = Body(...),
-    api_key: str = Depends(get_authenticated_user)
+    api_key: str = Depends(get_authenticated_user),
+    ms_token: Optional[str] = Depends(get_ms_token)
 ) -> VideoIdResponse:
     """
     Extract video ID from a TikTok URL.
@@ -117,7 +119,7 @@ async def parse_video_url(
     "/by-url",
     response_model=VideoInfoResponse,
     summary="Get Video Information by URL",
-    description="Retrieve detailed information about a TikTok video using its URL",
+    description="Retrieve detailed information about a TikTok video using its URL. Optionally provide X-MS-Token header to use a custom MS token instead of environment-configured tokens.",
     responses={
         200: {"description": "Successfully retrieved video information"},
         400: {"description": "Bad request", "model": ErrorResponse},
@@ -138,6 +140,7 @@ async def get_video_info_by_url(
     include_download_urls: bool = Query(
         False, description="Whether to include download URLs in response"),
     api_key: str = Depends(get_authenticated_user),
+    ms_token: Optional[str] = Depends(get_ms_token),
     tiktok_service: TikTokService = Depends(get_tiktok_service)
 ) -> VideoInfoResponse:
     """
@@ -182,7 +185,7 @@ async def get_video_info_by_url(
         logger.info(f"Extracted video ID: {video_id}")
 
         # Get video info from TikTok service (pass the original URL if available)
-        video_data = await tiktok_service.get_video_info(video_id, video_url=url)
+        video_data = await tiktok_service.get_video_info(video_id, video_url=url, custom_ms_token=ms_token)
 
         # Convert to Pydantic model
         video = create_tiktok_video(
@@ -211,7 +214,7 @@ async def get_video_info_by_url(
     "/{video_id}",
     response_model=VideoInfoResponse,
     summary="Get Video Information",
-    description="Retrieve detailed information about a TikTok video by ID",
+    description="Retrieve detailed information about a TikTok video by ID. Optionally provide X-MS-Token header to use a custom MS token instead of environment-configured tokens.",
     responses={
         200: {"description": "Successfully retrieved video information"},
         400: {"description": "Bad request", "model": ErrorResponse},
@@ -230,6 +233,7 @@ async def get_video_info(
     include_download_urls: bool = Query(
         False, description="Whether to include download URLs in response"),
     api_key: str = Depends(get_authenticated_user),
+    ms_token: Optional[str] = Depends(get_ms_token),
     tiktok_service: TikTokService = Depends(get_tiktok_service)
 ) -> VideoInfoResponse:
     """
@@ -278,7 +282,7 @@ async def get_video_info(
             f"Fetching video info for {video_id} with API key: {api_key[:10]}...")
 
         # Get video info from TikTok service (pass URL if available)
-        video_data = await tiktok_service.get_video_info(video_id, video_url=original_url)
+        video_data = await tiktok_service.get_video_info(video_id, video_url=original_url, custom_ms_token=ms_token)
 
         # Convert to Pydantic model
         video = create_tiktok_video(
@@ -307,7 +311,7 @@ async def get_video_info(
     "/{video_id}/comments",
     response_model=VideoCommentsResponse,
     summary="Get Video Comments",
-    description="Retrieve comments for a specific TikTok video",
+    description="Retrieve comments for a specific TikTok video. Optionally provide X-MS-Token header to use a custom MS token instead of environment-configured tokens.",
     responses={
         200: {"description": "Successfully retrieved video comments"},
         400: {"description": "Bad request", "model": ErrorResponse},
@@ -330,6 +334,7 @@ async def get_video_comments(
         description="Number of comments to retrieve (1-100)"
     ),
     api_key: str = Depends(get_authenticated_user),
+    ms_token: Optional[str] = Depends(get_ms_token),
     tiktok_service: TikTokService = Depends(get_tiktok_service)
 ) -> VideoCommentsResponse:
     """
@@ -350,9 +355,10 @@ async def get_video_comments(
     try:
         logger.info(
             f"Fetching {count} comments for video {video_id} with API key: {api_key[:10]}...")
+        logger.debug(f"Custom MS token: {ms_token}")
 
         # Get video comments from TikTok service
-        comments_data = await tiktok_service.get_video_comments(video_id, count=count)
+        comments_data = await tiktok_service.get_video_comments(video_id, count=count, custom_ms_token=ms_token)
 
         # Convert to Pydantic models
         comments = [create_tiktok_comment(comment_data)
@@ -384,7 +390,7 @@ async def get_video_comments(
     "/download-info",
     response_model=VideoDownloadResponse,
     summary="Get Video Download Information",
-    description="Get download URLs and metadata for a TikTok video by URL",
+    description="Get download URLs and metadata for a TikTok video by URL. Optionally provide X-MS-Token header to use a custom MS token instead of environment-configured tokens.",
     responses={
         200: {"description": "Successfully retrieved video download information"},
         400: {"description": "Bad request", "model": ErrorResponse},
@@ -407,6 +413,7 @@ async def get_video_download_info(
     resolve_redirects: bool = Query(
         True, description="Whether to resolve shortened URLs"),
     api_key: str = Depends(get_authenticated_user),
+    ms_token: Optional[str] = Depends(get_ms_token),
     tiktok_service: TikTokService = Depends(get_tiktok_service)
 ) -> VideoDownloadResponse:
     """
@@ -463,7 +470,8 @@ async def get_video_download_info(
             video_id,
             video_url=url,
             watermark=watermark,
-            quality=quality.value
+            quality=quality.value,
+            custom_ms_token=ms_token
         )
         logger.info(
             f"Received download data from TikTok service for {video_id}")
@@ -525,7 +533,7 @@ async def get_video_download_info(
 @router.get(
     "/download-stream",
     summary="Stream Video Download",
-    description="Stream TikTok video bytes directly for download",
+    description="Stream TikTok video bytes directly for download. Optionally provide X-MS-Token header to use a custom MS token instead of environment-configured tokens.",
     responses={
         200: {"description": "Video stream", "content": {"video/mp4": {}}},
         400: {"description": "Bad request", "model": ErrorResponse},
@@ -548,6 +556,7 @@ async def stream_video_download(
     resolve_redirects: bool = Query(
         True, description="Whether to resolve shortened URLs"),
     api_key: str = Depends(get_authenticated_user),
+    ms_token: Optional[str] = Depends(get_ms_token),
     tiktok_service: TikTokService = Depends(get_tiktok_service)
 ) -> StreamingResponse:
     """
@@ -602,7 +611,8 @@ async def stream_video_download(
             video_id,
             video_url=url,
             watermark=watermark,
-            quality=quality.value
+            quality=quality.value,
+            custom_ms_token=ms_token
         )
         logger.info(
             f"Successfully retrieved video bytes for {video_id}: {len(video_bytes)} bytes")

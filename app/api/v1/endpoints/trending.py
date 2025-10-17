@@ -1,13 +1,13 @@
 """Trending videos endpoints."""
 
 import logging
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from app.dependencies import get_authenticated_user, rate_limit_trending
+from app.dependencies import get_authenticated_user, rate_limit_trending, get_ms_token
 from app.models.schemas import (
     ErrorResponse,
     TrendingVideosResponse,
@@ -26,7 +26,7 @@ limiter = Limiter(key_func=get_remote_address)
     "/videos",
     response_model=TrendingVideosResponse,
     summary="Get Trending Videos",
-    description="Retrieve trending videos from TikTok",
+    description="Retrieve trending videos from TikTok. Optionally provide X-MS-Token header to use a custom MS token instead of environment-configured tokens.",
     responses={
         200: {"description": "Successfully retrieved trending videos"},
         400: {"description": "Bad request", "model": ErrorResponse},
@@ -47,6 +47,7 @@ async def get_trending_videos(
         description="Number of trending videos to retrieve (1-100)"
     ),
     api_key: str = Depends(get_authenticated_user),
+    ms_token: Optional[str] = Depends(get_ms_token),
     tiktok_service: TikTokService = Depends(get_tiktok_service)
 ) -> TrendingVideosResponse:
     """
@@ -71,7 +72,7 @@ async def get_trending_videos(
             f"Fetching {count} trending videos for API key: {api_key[:10]}...")
 
         # Get trending videos from TikTok service
-        videos_data = await tiktok_service.get_trending_videos(count=count)
+        videos_data = await tiktok_service.get_trending_videos(count=count, custom_ms_token=ms_token)
 
         # Convert to Pydantic models
         videos = [create_tiktok_video(video_data)
