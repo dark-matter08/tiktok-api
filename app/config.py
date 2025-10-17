@@ -66,6 +66,24 @@ class Settings(BaseSettings):
         description="Number of TikTok sessions to create"
     )
 
+    # Webshare Proxy Configuration
+    webshare_api_key: Optional[str] = Field(
+        default=None,
+        description="Webshare API key for proxy service"
+    )
+    enable_proxy: bool = Field(
+        default=False,
+        description="Enable proxy rotation via Webshare"
+    )
+    proxy_algorithm: str = Field(
+        default="round-robin",
+        description="Proxy rotation algorithm: round-robin, random, or first"
+    )
+    webshare_cookie: Optional[str] = Field(
+        default=None,
+        description="Webshare cookie for API authentication"
+    )
+
     @property
     def api_keys_list(self) -> List[str]:
         """Get API keys as a list."""

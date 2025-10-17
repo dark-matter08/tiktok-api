@@ -3,6 +3,14 @@
 from typing import List, Optional, Dict, Any, Union
 from datetime import datetime
 from pydantic import BaseModel, Field
+from enum import Enum
+
+
+class VideoQuality(str, Enum):
+    """Video quality options."""
+    AUTO = "auto"
+    HD = "hd"
+    SD = "sd"
 
 
 class ErrorResponse(BaseModel):
@@ -58,6 +66,8 @@ class TikTokVideo(BaseModel):
         default_factory=list, description="Mentioned users")
     challenges: List[Dict[str, Any]] = Field(
         default_factory=list, description="Challenges/hashtags")
+    download_urls: Optional["VideoDownloadUrls"] = Field(
+        None, description="Video download URLs (included when requested)")
 
 
 class TikTokHashtag(BaseModel):
@@ -246,6 +256,48 @@ class TokenStatsResponse(BaseModel):
         default_factory=datetime.utcnow, description="Response timestamp")
 
 
+class VideoDownloadRequest(BaseModel):
+    """Request model for video download."""
+    url: str = Field(..., description="TikTok video URL", min_length=1)
+    watermark: bool = Field(
+        default=False, description="Whether to include watermark")
+    quality: VideoQuality = Field(
+        default=VideoQuality.AUTO, description="Video quality preference")
+    resolve_redirects: bool = Field(
+        default=True, description="Whether to resolve shortened URLs"
+    )
+
+
+class VideoDownloadUrls(BaseModel):
+    """Video download URLs for different qualities and watermark options."""
+    with_watermark: Optional[str] = Field(
+        None, description="Download URL with watermark")
+    without_watermark: Optional[str] = Field(
+        None, description="Download URL without watermark")
+    hd_url: Optional[str] = Field(
+        None, description="High definition download URL")
+    sd_url: Optional[str] = Field(
+        None, description="Standard definition download URL")
+    auto_url: Optional[str] = Field(
+        None, description="Auto-selected quality download URL")
+
+
+class VideoDownloadResponse(BaseModel):
+    """Response model for video download information."""
+    video_id: str = Field(..., description="Video ID")
+    original_url: str = Field(..., description="Original TikTok URL")
+    download_urls: VideoDownloadUrls = Field(
+        ..., description="Available download URLs")
+    quality: VideoQuality = Field(..., description="Selected quality")
+    watermark: bool = Field(..., description="Watermark preference")
+    file_size: Optional[int] = Field(
+        None, description="Estimated file size in bytes")
+    duration: Optional[int] = Field(
+        None, description="Video duration in seconds")
+    timestamp: datetime = Field(
+        default_factory=datetime.utcnow, description="Response timestamp")
+
+
 # Utility functions for converting TikTok API data to Pydantic models
 def create_tiktok_user(user_data: Dict[str, Any]) -> TikTokUser:
     """Create TikTokUser from API data."""
@@ -275,7 +327,7 @@ def create_tiktok_user(user_data: Dict[str, Any]) -> TikTokUser:
     )
 
 
-def create_tiktok_video(video_data: Dict[str, Any]) -> TikTokVideo:
+def create_tiktok_video(video_data: Dict[str, Any], include_download_urls: bool = False) -> TikTokVideo:
     """Create TikTokVideo from API data."""
     # Extract hashtags from description
     desc = video_data.get("desc", "")
@@ -286,6 +338,11 @@ def create_tiktok_video(video_data: Dict[str, Any]) -> TikTokVideo:
         import re
         hashtags = re.findall(r'#(\w+)', desc)
         mentions = re.findall(r'@(\w+)', desc)
+
+    # Extract download URLs if requested
+    download_urls = None
+    if include_download_urls:
+        download_urls = extract_download_urls_from_video_data(video_data)
 
     return TikTokVideo(
         id=str(video_data.get("id", "")),
@@ -298,6 +355,7 @@ def create_tiktok_video(video_data: Dict[str, Any]) -> TikTokVideo:
         hashtags=hashtags,
         mentions=mentions,
         challenges=video_data.get("challenges", []),
+        download_urls=download_urls,
     )
 
 
@@ -338,4 +396,50 @@ def create_tiktok_comment(comment_data: Dict[str, Any]) -> TikTokComment:
         user=create_tiktok_user(comment_data.get("user", {})),
         like_count=comment_data.get("diggCount", 0),
         reply_comment_total=comment_data.get("replyCommentTotal", 0),
+    )
+
+
+def extract_download_urls_from_video_data(video_data: Dict[str, Any]) -> VideoDownloadUrls:
+    """Extract download URLs from TikTok video data."""
+    video_info = video_data.get("video", {})
+
+    # Extract URLs from different possible fields in TikTok API response
+    play_addr = video_info.get("playAddr", "")
+    download_addr = video_info.get("downloadAddr", "")
+
+    # Try to get URLs from bitrate info (different qualities)
+    bitrate_info = video_info.get("bitrateInfo", {})
+    hd_url = None
+    sd_url = None
+    auto_url = None
+
+    if bitrate_info:
+        # Look for different quality variants
+        for bitrate in bitrate_info:
+            if isinstance(bitrate, dict):
+                quality = bitrate.get("GearName", "").lower()
+                url = bitrate.get("PlayAddr", {}).get("UrlList", [None])[0]
+                if url:
+                    if "hd" in quality or "high" in quality:
+                        hd_url = url
+                    elif "sd" in quality or "standard" in quality:
+                        sd_url = url
+                    else:
+                        auto_url = url
+
+    # Fallback to main URLs if no bitrate info
+    if not any([hd_url, sd_url, auto_url]):
+        auto_url = play_addr or download_addr
+
+    # Determine watermark URLs (this is a simplified approach)
+    # In practice, TikTok API may provide different URLs for watermarked vs non-watermarked
+    with_watermark = play_addr or auto_url
+    without_watermark = download_addr or auto_url
+
+    return VideoDownloadUrls(
+        with_watermark=with_watermark,
+        without_watermark=without_watermark,
+        hd_url=hd_url,
+        sd_url=sd_url,
+        auto_url=auto_url,
     )

@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import trending, user, video, hashtag, search, sound
+from app.api.v1.endpoints import trending, user, video, hashtag, search, sound, proxy
 
 # Create the main API v1 router
 api_router = APIRouter()
@@ -42,4 +42,10 @@ api_router.include_router(
     sound.router,
     prefix="/sound",
     tags=["sound"]
+)
+
+api_router.include_router(
+    proxy.router,
+    prefix="/proxy",
+    tags=["proxy"]
 )

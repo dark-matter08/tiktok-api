@@ -90,8 +90,8 @@ RUN chown -R appuser:appuser /app
 # Switch to non-root user
 USER appuser
 
-# Install Playwright browsers as appuser
-RUN /app/.venv/bin/python -m playwright install chromium
+# Install Playwright browsers as appuser (install all browsers for flexibility)
+RUN /app/.venv/bin/python -m playwright install
 
 # Expose port
 EXPOSE 8000

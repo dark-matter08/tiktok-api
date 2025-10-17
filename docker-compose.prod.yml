@@ -1,16 +1,27 @@
 services:
   tiktok-api:
-    image: ${DOCKER_USERNAME}/tiktok-api:latest
+    image: darkmatter08/tiktok-api:latest
     container_name: tiktok-api-backend
     restart: unless-stopped
     ports:
       - "9010:8000"
     environment:
-      - API_KEYS=${API_KEYS}
-      - MS_TOKENS=${MS_TOKENS}
+      - API_KEYS=SeLTOAGoNIndySIBiToSEntIErseChLoparDIthIgiNEsCOSpa
+      - MS_TOKENS="nmvtCUwIY7dgQxU-xz6c2JCu_RBGzPDc_dGpT8I0XgJ9CzwEATcA0ru_dCNBlBoYrEr6LDgo9HhGNrq3GWH0osAR9gsvFe3xzCCB6yoM9ZKQBaIoEbR9Up5fxXIJBlMbYHUWet9s8Is6S6fXJ_kshqc="
       - ENVIRONMENT=production
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - REDIS_URL=redis://redis:6379
+      - RATE_LIMIT_PER_MINUTE=100
+      - APP_TITLE=TikTok API Backend
+      - APP_DESCRIPTION=A FastAPI backend for TikTok API interactions
+      - APP_VERSION=1.0.0
+      - TIKTOK_BROWSER=webkit
+      - TIKTOK_SLEEP_AFTER=3
+      - TIKTOK_NUM_SESSIONS=1
+      # Webshare Proxy Configuration (Optional)
+      - ENABLE_PROXY=true
+      - WEBSHARE_API_KEY=yzpbrvnnmiaqi56zhiyfph75pqggp5m5x3ckrrdqy
+      - PROXY_ALGORITHM=round-robin
+      - WEBSHARE_COOKIE=_tid=53ee2bfc-4e7f-4752-a718-e72fd5db7e3c
     depends_on:
       - redis
     healthcheck:

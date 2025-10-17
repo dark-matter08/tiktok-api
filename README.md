@@ -102,6 +102,10 @@ The API automatically resolves shortened URLs to extract the video ID.
 | `TIKTOK_BROWSER` | Browser for TikTok API (chromium/firefox/webkit) | `chromium` |
 | `TIKTOK_SLEEP_AFTER` | Sleep time after creating sessions | `3` |
 | `TIKTOK_NUM_SESSIONS` | Number of TikTok sessions | `1` |
+| `ENABLE_PROXY` | Enable proxy rotation via Webshare | `false` |
+| `WEBSHARE_API_KEY` | Webshare API key for proxy service | None |
+| `PROXY_ALGORITHM` | Proxy rotation algorithm (round-robin/random/first) | `round-robin` |
+| `WEBSHARE_COOKIE` | Webshare cookie for API authentication | `_tid=53ee2bfc-4e7f-4752-a718-e72fd5db7e3c` |
 
 ### How to Get MS Tokens
 
@@ -112,6 +116,42 @@ The API automatically resolves shortened URLs to extract the video ID.
 5. Copy the value and add it to your `MS_TOKENS` environment variable
 
 **Note**: You can have multiple MS tokens for better reliability and rate limit distribution.
+
+### Proxy Configuration
+
+This API supports proxy rotation using Webshare via the `proxyproviders` package to avoid IP-based rate limits and bypass geo-restrictions.
+
+#### Setup
+
+1. Get a Webshare API key from [https://www.webshare.io](https://www.webshare.io)
+2. Configure environment variables:
+
+```env
+ENABLE_PROXY=true
+WEBSHARE_API_KEY=your_api_key_here
+PROXY_ALGORITHM=round-robin  # Options: round-robin, random, first
+WEBSHARE_COOKIE=_tid=53ee2bfc-4e7f-4752-a718-e72fd5db7e3c
+```
+
+#### Proxy Algorithms
+
+- **round-robin**: Cycles through proxies sequentially (default)
+- **random**: Selects a random proxy for each request
+- **first**: Always uses the first available proxy
+
+#### Monitoring
+
+Check proxy status:
+```bash
+curl -H "X-API-Key: your-api-key" http://localhost:8000/api/v1/proxy/status
+```
+
+#### Benefits
+
+- Avoid IP-based rate limits
+- Bypass geo-restrictions
+- Improved reliability with automatic failover
+- Smart proxy rotation managed by proxyproviders package
 
 ## API Endpoints
 

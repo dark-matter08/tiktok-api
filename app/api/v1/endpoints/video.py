@@ -4,6 +4,7 @@ import logging
 from urllib.parse import unquote
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Request, status
+from fastapi.responses import StreamingResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -14,6 +15,10 @@ from app.models.schemas import (
     VideoCommentsResponse,
     VideoUrlRequest,
     VideoIdResponse,
+    VideoDownloadRequest,
+    VideoDownloadResponse,
+    VideoDownloadUrls,
+    VideoQuality,
     TikTokVideo,
     TikTokComment,
     create_tiktok_video,
@@ -122,6 +127,8 @@ async def get_video_info_by_url(
     url: str = Query(..., description="TikTok video URL"),
     resolve_redirects: bool = Query(
         True, description="Whether to resolve shortened URLs"),
+    include_download_urls: bool = Query(
+        False, description="Whether to include download URLs in response"),
     api_key: str = Depends(get_authenticated_user),
     tiktok_service: TikTokService = Depends(get_tiktok_service)
 ) -> VideoInfoResponse:
@@ -162,7 +169,8 @@ async def get_video_info_by_url(
         video_data = await tiktok_service.get_video_info(video_id, video_url=url)
 
         # Convert to Pydantic model
-        video = create_tiktok_video(video_data)
+        video = create_tiktok_video(
+            video_data, include_download_urls=include_download_urls)
 
         logger.info(f"Successfully fetched video info for {video_id}")
 
@@ -203,6 +211,8 @@ async def get_video_info_by_url(
 async def get_video_info(
     request: Request,
     video_id: str = Path(..., description="TikTok video ID"),
+    include_download_urls: bool = Query(
+        False, description="Whether to include download URLs in response"),
     api_key: str = Depends(get_authenticated_user),
     tiktok_service: TikTokService = Depends(get_tiktok_service)
 ) -> VideoInfoResponse:
@@ -255,7 +265,8 @@ async def get_video_info(
         video_data = await tiktok_service.get_video_info(video_id, video_url=original_url)
 
         # Convert to Pydantic model
-        video = create_tiktok_video(video_data)
+        video = create_tiktok_video(
+            video_data, include_download_urls=include_download_urls)
 
         logger.info(f"Successfully fetched video info for {video_id}")
 
@@ -351,3 +362,272 @@ async def get_video_comments(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch video comments: {str(e)}"
         )
+
+
+@router.get(
+    "/download-info",
+    response_model=VideoDownloadResponse,
+    summary="Get Video Download Information",
+    description="Get download URLs and metadata for a TikTok video by URL",
+    responses={
+        200: {"description": "Successfully retrieved video download information"},
+        400: {"description": "Bad request", "model": ErrorResponse},
+        401: {"description": "Unauthorized", "model": ErrorResponse},
+        403: {"description": "Forbidden", "model": ErrorResponse},
+        404: {"description": "Video not found", "model": ErrorResponse},
+        429: {"description": "Rate limit exceeded", "model": ErrorResponse},
+        500: {"description": "Internal server error", "model": ErrorResponse},
+    },
+    tags=["video"]
+)
+@limiter.limit("50/minute")
+async def get_video_download_info(
+    request: Request,
+    url: str = Query(..., description="TikTok video URL"),
+    watermark: bool = Query(
+        False, description="Whether to include watermark in download URLs"),
+    quality: VideoQuality = Query(
+        VideoQuality.AUTO, description="Video quality preference"),
+    resolve_redirects: bool = Query(
+        True, description="Whether to resolve shortened URLs"),
+    api_key: str = Depends(get_authenticated_user),
+    tiktok_service: TikTokService = Depends(get_tiktok_service)
+) -> VideoDownloadResponse:
+    """
+    Get download information for a TikTok video including URLs for different qualities and watermark options.
+
+    This endpoint accepts TikTok URLs in various formats:
+    - Standard: https://www.tiktok.com/@username/video/1234567890123456789
+    - Short: https://vm.tiktok.com/ZMxxx/
+    - Alternative short: https://www.tiktok.com/t/ZMxxx/
+
+    Args:
+        url: TikTok video URL
+        watermark: Whether to include watermark in download URLs
+        quality: Video quality preference (auto, hd, sd)
+        resolve_redirects: Whether to resolve shortened URLs
+        api_key: API key for authentication
+        tiktok_service: TikTok service instance
+
+    Returns:
+        VideoDownloadResponse: Download URLs and metadata
+
+    Raises:
+        HTTPException: If the request fails or video is not found
+    """
+    try:
+        logger.info(
+            f"Download info request started - URL: {url}, Watermark: {watermark}, Quality: {quality}, Resolve redirects: {resolve_redirects}")
+
+        # Extract video ID from URL
+        logger.debug(f"Extracting video ID from URL: {url}")
+        video_id = await extract_video_id_from_url(url, resolve_redirects=resolve_redirects)
+        if not video_id:
+            logger.error(f"Failed to extract video ID from URL: {url}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unable to extract video ID from URL: {url}"
+            )
+
+        logger.info(
+            f"Successfully extracted video ID: {video_id} from URL: {url}")
+
+        # Get download info from TikTok service
+        logger.debug(
+            f"Calling TikTok service for download info - Video ID: {video_id}")
+        download_data = await tiktok_service.get_video_download_info(
+            video_id,
+            video_url=url,
+            watermark=watermark,
+            quality=quality.value
+        )
+        logger.info(
+            f"Received download data from TikTok service for {video_id}")
+
+        # Convert to Pydantic models
+        logger.debug(
+            f"Converting download URLs to Pydantic model for {video_id}")
+        download_urls = VideoDownloadUrls(**download_data["download_urls"])
+        logger.debug(f"Successfully converted download URLs for {video_id}")
+
+        # Create response
+        response = VideoDownloadResponse(
+            video_id=video_id,
+            original_url=url,
+            download_urls=download_urls,
+            quality=quality,
+            watermark=watermark,
+            file_size=download_data.get("file_size"),
+            duration=download_data.get("duration")
+        )
+
+        logger.info(
+            f"Successfully prepared download info response for {video_id} - File size: {download_data.get('file_size')} bytes, Duration: {download_data.get('duration')} seconds")
+        return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching download info for URL {url}: {e}")
+        error_message = str(e).lower()
+
+        if "not found" in error_message or "404" in error_message:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Video not found for URL: {url}"
+            )
+        elif "invalid response structure" in error_message or "200" in error_message:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="TikTok API returned an unexpected response format. The video may be private, geo-restricted, or temporarily unavailable."
+            )
+        elif "rate limit" in error_message or "too many requests" in error_message:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Rate limit exceeded. Please try again later."
+            )
+        elif "token" in error_message or "session" in error_message:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="TikTok service temporarily unavailable. Please try again later."
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to fetch download info: {str(e)}"
+            )
+
+
+@router.get(
+    "/download-stream",
+    summary="Stream Video Download",
+    description="Stream TikTok video bytes directly for download",
+    responses={
+        200: {"description": "Video stream", "content": {"video/mp4": {}}},
+        400: {"description": "Bad request", "model": ErrorResponse},
+        401: {"description": "Unauthorized", "model": ErrorResponse},
+        403: {"description": "Forbidden", "model": ErrorResponse},
+        404: {"description": "Video not found", "model": ErrorResponse},
+        429: {"description": "Rate limit exceeded", "model": ErrorResponse},
+        500: {"description": "Internal server error", "model": ErrorResponse},
+    },
+    tags=["video"]
+)
+@limiter.limit("20/minute")
+async def stream_video_download(
+    request: Request,
+    url: str = Query(..., description="TikTok video URL"),
+    watermark: bool = Query(
+        False, description="Whether to include watermark"),
+    quality: VideoQuality = Query(
+        VideoQuality.AUTO, description="Video quality preference"),
+    resolve_redirects: bool = Query(
+        True, description="Whether to resolve shortened URLs"),
+    api_key: str = Depends(get_authenticated_user),
+    tiktok_service: TikTokService = Depends(get_tiktok_service)
+) -> StreamingResponse:
+    """
+    Stream TikTok video bytes directly for download.
+
+    This endpoint accepts TikTok URLs in various formats and streams the video
+    content directly to the client with appropriate headers for file download.
+
+    Args:
+        url: TikTok video URL
+        watermark: Whether to include watermark
+        quality: Video quality preference (auto, hd, sd)
+        resolve_redirects: Whether to resolve shortened URLs
+        api_key: API key for authentication
+        tiktok_service: TikTok service instance
+
+    Returns:
+        StreamingResponse: Video stream with appropriate headers
+
+    Raises:
+        HTTPException: If the request fails or video is not found
+    """
+    try:
+        logger.info(
+            f"Stream download request started - URL: {url}, Watermark: {watermark}, Quality: {quality}, Resolve redirects: {resolve_redirects}")
+
+        # Extract video ID from URL
+        logger.debug(f"Extracting video ID from URL: {url}")
+        video_id = await extract_video_id_from_url(url, resolve_redirects=resolve_redirects)
+        if not video_id:
+            logger.error(f"Failed to extract video ID from URL: {url}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unable to extract video ID from URL: {url}"
+            )
+
+        logger.info(
+            f"Successfully extracted video ID: {video_id} from URL: {url}")
+
+        # Get video bytes from TikTok service
+        logger.debug(
+            f"Calling TikTok service for video bytes - Video ID: {video_id}")
+        video_bytes = await tiktok_service.get_video_bytes(
+            video_id,
+            video_url=url,
+            watermark=watermark,
+            quality=quality.value
+        )
+        logger.info(
+            f"Successfully retrieved video bytes for {video_id}: {len(video_bytes)} bytes")
+
+        # Create filename for download
+        filename = f"tiktok_video_{video_id}.mp4"
+        if watermark:
+            filename = f"tiktok_video_{video_id}_watermarked.mp4"
+
+        logger.debug(f"Created filename for download: {filename}")
+
+        # Prepare streaming response headers
+        headers = {
+            "Content-Disposition": f"attachment; filename={filename}",
+            "Content-Length": str(len(video_bytes)),
+            "Cache-Control": "no-cache"
+        }
+        logger.debug(f"Prepared streaming response headers: {headers}")
+
+        logger.info(
+            f"Successfully prepared streaming response for {video_id} - {len(video_bytes)} bytes, filename: {filename}")
+
+        # Return streaming response with appropriate headers
+        return StreamingResponse(
+            iter([video_bytes]),
+            media_type="video/mp4",
+            headers=headers
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error streaming video for URL {url}: {e}")
+        error_message = str(e).lower()
+
+        if "not found" in error_message or "404" in error_message:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Video not found for URL: {url}"
+            )
+        elif "invalid response structure" in error_message or "200" in error_message:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="TikTok API returned an unexpected response format. The video may be private, geo-restricted, or temporarily unavailable."
+            )
+        elif "rate limit" in error_message or "too many requests" in error_message:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Rate limit exceeded. Please try again later."
+            )
+        elif "token" in error_message or "session" in error_message:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="TikTok service temporarily unavailable. Please try again later."
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to stream video: {str(e)}"
+            )
