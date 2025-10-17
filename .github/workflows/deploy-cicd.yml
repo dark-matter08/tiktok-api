@@ -81,7 +81,7 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 22
           source: "docker-compose.prod.yml"
-          target: "/opt/tiktok-api/"
+          target: "tiktok-api/"
 
       - name: Deploy to server
         uses: appleboy/ssh-action@v1.0.3
