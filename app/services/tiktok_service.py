@@ -107,7 +107,7 @@ class TikTokService:
                 sleep_after=self.settings.tiktok_sleep_after,
                 browser=self.settings.tiktok_browser,
                 proxy_provider=self.proxy_provider if self.proxy_provider else None,
-                headless=False
+                headless=True
             )
 
             yield api

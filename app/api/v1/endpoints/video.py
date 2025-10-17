@@ -73,6 +73,14 @@ async def parse_video_url(
         HTTPException: If the URL is invalid or ID cannot be extracted
     """
     try:
+        # Clean and validate URL
+        url_request.url = url_request.url.strip()
+        if not url_request.url:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="URL parameter cannot be empty"
+            )
+
         logger.info(f"Parsing video URL: {url_request.url}")
 
         # Extract video ID from URL
@@ -153,6 +161,14 @@ async def get_video_info_by_url(
         HTTPException: If the request fails or video is not found
     """
     try:
+        # Clean and validate URL
+        url = url.strip()
+        if not url:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="URL parameter cannot be empty"
+            )
+
         logger.info(f"Getting video info by URL: {url}")
 
         # Extract video ID from URL
@@ -416,6 +432,14 @@ async def get_video_download_info(
         HTTPException: If the request fails or video is not found
     """
     try:
+        # Clean and validate URL
+        url = url.strip()
+        if not url:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="URL parameter cannot be empty"
+            )
+
         logger.info(
             f"Download info request started - URL: {url}, Watermark: {watermark}, Quality: {quality}, Resolve redirects: {resolve_redirects}")
 
@@ -547,6 +571,14 @@ async def stream_video_download(
         HTTPException: If the request fails or video is not found
     """
     try:
+        # Clean and validate URL
+        url = url.strip()
+        if not url:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="URL parameter cannot be empty"
+            )
+
         logger.info(
             f"Stream download request started - URL: {url}, Watermark: {watermark}, Quality: {quality}, Resolve redirects: {resolve_redirects}")
 

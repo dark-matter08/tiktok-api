@@ -33,6 +33,12 @@ async def extract_video_id_from_url(url: str, resolve_redirects: bool = True) ->
         - https://vm.tiktok.com/ZMxxx/ (requires resolution)
         - https://www.tiktok.com/t/ZMxxx/ (requires resolution)
     """
+    # Clean and validate URL
+    url = url.strip()
+    if not url:
+        logger.error("Empty URL provided")
+        return None
+
     # Try to extract from standard URL format
     match = STANDARD_URL_PATTERN.search(url)
     if match:
@@ -68,6 +74,12 @@ async def resolve_short_url(short_url: str, max_redirects: int = 5) -> Optional[
         Resolved full URL, or None if resolution fails
     """
     try:
+        # Clean and validate URL
+        short_url = short_url.strip()
+        if not short_url:
+            logger.error("Empty short URL provided")
+            return None
+
         async with httpx.AsyncClient(follow_redirects=True, timeout=10.0) as client:
             # Make a HEAD request to follow redirects without downloading content
             response = await client.head(short_url, follow_redirects=True)
