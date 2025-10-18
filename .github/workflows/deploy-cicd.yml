@@ -120,5 +120,5 @@ jobs:
 
       - name: Health Check
         run: |
-          sleep 1120
+          sleep 120
           curl -f http://${{ secrets.SERVER_HOST }}:9010/health || exit 1
