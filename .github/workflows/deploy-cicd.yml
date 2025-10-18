@@ -100,7 +100,7 @@ jobs:
             docker compose up -d
 
             # Wait for health check
-            sleep 15
+            sleep 40
 
             # Check if containers are running
             if docker ps | grep -q tiktok-api-backend; then
@@ -120,5 +120,5 @@ jobs:
 
       - name: Health Check
         run: |
-          sleep 30
+          sleep 1120
           curl -f http://${{ secrets.SERVER_HOST }}:9010/health || exit 1
